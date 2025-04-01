@@ -33,7 +33,7 @@
         <form id="taskListForm">
         <div class="container">
           <div class="row mb-4">
-            <div class="col" aria-label="Choose to diaplay">
+            <div class="col">
               <label id="statusFilterLabel" for="statusFilter">Choose to display:</label><br>
               <select
                 name="statusFilter"
@@ -55,7 +55,7 @@
                 <div class="col">&nbsp;</div>
             </div>
           </div>
-          <!-- Modal -->
+          <!-- Modal to add a new item -->
           <div
             class="modal fade"
             id="addNewTaskModal"
@@ -77,16 +77,15 @@
                   ></button>
                 </div>
                 <div class="modal-body">
-                  <label for="taskName">Task Name</label>
+                  <label for="newTaskName">Task Name</label>
                   <div class="input-group has-validation">
                     <textarea
-                      id="taskName"
+                      id="newTaskName"
                       cols="50"
                       rows="3"
                       maxlength="120"
-                      required
                     ></textarea>
-                    <div class="invalid-feedback">
+                    <div id="newTaskValidation" class="invalid-feedback">
                       Please add a task name or close the dialog.
                     </div>
                   </div>
@@ -103,10 +102,71 @@
                   <button
                     type="button"
                     class="btn btn-primary"
-                    onclick="addItem($('#taskName').val())"
+                    onclick="addItem($('#newTaskName').val())"
                     aria-label="Save New Task"
                   >
                     Save New Task
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Modal to edit an existing item -->
+          <div
+            class="modal fade"
+            id="editTaskModal"
+            tabindex="-1"
+            aria-labelledby="editTaskModalLabel"
+            aria-hidden="true"
+          >
+            <div class="modal-dialog">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <div class="modal-title display-6" id="editTaskModalLabel">
+                    Edit Task
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close"
+                  ></button>
+                </div>
+                <div class="modal-body">
+                  <input type="hidden" id="editTaskId" value="">
+                  <label for="editTaskName">Task Name</label>
+                  <div class="input-group has-validation">
+                    <textarea
+                      id="editTaskName"
+                      cols="50"
+                      rows="3"
+                      maxlength="120"
+                    ></textarea>
+                    <span class="d-block mt-1">
+                    <input type="checkbox" id="editTaskIsComplete" class="m-1">
+                    <label for="editTaskIsComplete">Task is complete</label>
+                </span>
+                    <div id="editTaskValidation" class="invalid-feedback">
+                      Please add a task name or close the dialog.
+                    </div>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                    aria-label="Close"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    onclick="updateItem($('#editTaskId').val(), $('#editTaskName').val(), $('#editTaskIsComplete').prop('checked'))"
+                    aria-label="Save Changes"
+                  >
+                    Save Changes
                   </button>
                 </div>
               </div>
@@ -172,13 +232,38 @@
 
         // Put focus on the taskName textarea when the modal opens.
         $("#addNewTaskModal").on("shown.bs.modal", function () {
-          $("#taskName").focus();
+            $("#newTaskValidation").attr("display", "none");
+            $("#newTaskName").attr("required", "required");
+            $("#newTaskName").focus();
         });
 
-        // In case a validation error was displayed on the modal, reset it to being hidden when the modal closes.
+        $("#editTaskModal").on("shown.bs.modal", function () {
+            $("#editTaskValidation").attr("display", "none");
+            $("#editTaskName").attr("required", "required");
+            $("#editTaskName").focus();
+        });
+
+        // Reset modals when a modal closes.
         $("#addNewTaskModal").on("hidden.bs.modal", function () {
-          $(".invalid-feedback").css("display", "none");
-          $("#taskNameListName").focus(); // Don't leave focus on an element we're hiding.
+            $("#newTaskName").attr("required", ""); // In case IE is dumb and we can't remove the attribute.
+            $("#newTaskName").removeAttr("required");
+            $(".invalid-feedback").css("display", "none");
+        });
+
+        $("#editTaskModal").on("hidden.bs.modal", function () {
+            document.activeElement.blur();
+            $("#editTaskName").attr("required", ""); // In case IE is dumb and we can't remove the attribute.
+            $("#editTaskName").removeAttr("required");
+            $("#editTaskIsComplete").attr("checked", "");
+            $("#editTaskIsComplete").removeAttr("checked");
+            $(".invalid-feedback").css("display", "none");
+        });
+
+        document.addEventListener('hide.bs.modal', function (event) {
+            if (document.activeElement) {
+                // Prevent console errors about hidden aria elements.
+                document.activeElement.blur();
+            }
         });
       });
 
@@ -221,13 +306,13 @@
         var rowsAdded = 0;
 
         if (data) {
-          data.forEach((element) => {
+          data.forEach((task) => {
             if (
               $("#statusFilter").val().length == 0 ||
-              ($("#statusFilter").val() == "completed" && element.isComplete) ||
-              ($("#statusFilter").val() == "pending" && !element.isComplete)
+              ($("#statusFilter").val() == "completed" && task.isComplete) ||
+              ($("#statusFilter").val() == "pending" && !task.isComplete)
             ) {
-              addRow(element);
+              addRow(task);
               rowsAdded++;
             }
           });
@@ -250,38 +335,37 @@
       }
 
       function addRow(taskItem) {
-        var rowHtml =
-          '<div class="row pt-1 pb-1 mb-2 bg-light" id="taskItem_' +
-          taskItem.id +
-          '" role="row">' +
-          '<div class="col"><input type="checkbox" id="item_' +
-          taskItem.id +
-          '_isComplete\"  aria-label="is ' + taskItem.taskName + ' task complete" onchange=(changeStatus("' +
-          taskItem.id +
-          '")) ' +
-          (taskItem.isComplete ? "checked" : "") +
-          ' aria-checked="' + (taskItem.isComplete ? "true" : "false") + '"></div>' + 
-          '<div class="col-4" id="item_' +
-          taskItem.id +
-          '_name">' +
-          taskItem.taskName +
-          '</div>' +
-          '<div class="col">' +
-          '<button type="button" class="btn btn-secondary" onclick=deleteItem(\'' +
-          taskItem.id +
-          '\') >Delete</button>' +
-          '</div></div>';
-        $("#taskList").append(rowHtml);
+
+        let isChecked = taskItem.isComplete ? "checked" : "";
+        let isComplete = taskItem.isComplete,toString;
+
+        var rowHtmlTemplate =
+            `<div class="row pt-1 pb-1 mb-2 bg-light" id="taskItem_${taskItem.id}" role="row">
+                <div class="col">
+                    <input type="checkbox" id="item_${taskItem.id}_isComplete" aria-label="is ${taskItem.taskName} task complete" 
+                    onchange=(changeStatus("${taskItem.id}")) ${isChecked} aria-checked="${isComplete}")>
+                </div>
+                <div class="col-4" id="item_${taskItem.id}_name">${taskItem.taskName}</div>
+                <div class="col">
+                    <button type="button" class="btn btn-secondary m-1"
+                        onclick="editItem('${taskItem.id}', '${taskItem.taskName}')"
+                        data-bs-toggle="modal" data-bs-target="#editTaskModal" aria-label="Edit" aria-haspopup="true">Edit</button>
+                    <button type="button" class="btn btn-secondary m-1" onclick=deleteItem('${taskItem.id}') >Delete</button>
+                </div>
+            </div>`;
+
+        $("#taskList").append(rowHtmlTemplate);
       }
 
       function addTableFooter() {
         $("#taskList").append(
-          '<div class="row" id="tableFooter">'
-            + '<div class="col">'
-            + '<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addNewTaskModal" '
-            + 'aria-label="Add New" aria-haspopup="true">'
-            + 'Add New'
-            + '</button></div></div>'
+            `<div class="row" id="tableFooter">
+                <div class="col">
+                    <button type="button" id="addNewTaskButton" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addNewTaskModal"
+                        aria-label="Add New" aria-haspopup="true">Add New
+                    </button>
+                </div>
+            </div>`
         );
       }
 
@@ -299,6 +383,38 @@
         }
       }
 
+      function editItem(id, taskName){
+        if($("#item_" + id + "_isComplete").prop("checked")){
+            $("#editTaskIsComplete").attr("checked", "checked");
+        } else {
+            $("#editTaskIsComplete").attr("checked", "");
+            $("#editTaskIsComplete").removeAttr("checked");
+        }
+        $("#editTaskId").val(id);
+        $("#editTaskName").val(taskName);
+      }
+
+      function updateItem(id, taskName, isComplete){
+
+        if ($("form")[0].checkValidity()) {
+            var data = JSON.parse(localStorage.getItem("data"));
+            var index = data
+            .map((item) => {
+                return item.id;
+            })
+            .indexOf(id);
+
+            data[index].taskName = taskName;
+            data[index].isComplete = isComplete;
+
+            document.activeElement.blur(); // Don't leave focus on an element we're hiding.
+            storeData(data);
+            location.reload();
+        } else {
+          $(".invalid-feedback").css("display", "block");
+        }
+      }
+
       function deleteItem(id) {
         if (
           confirm(
@@ -310,7 +426,7 @@
           var data = JSON.parse(localStorage.getItem("data"));
           var index = data
             .map((item) => {
-              return item.Id;
+              return item.id;
             })
             .indexOf(id);
           data.splice(index, 1);
@@ -339,6 +455,12 @@
 
         let checkboxId = "item_" + id + "_isComplete";
         $("#" + checkboxId).attr("aria-checked", data[index].isComplete)
+
+        if($("#statusFilter").val().length > 0){
+            // If we're filtering on completed/pending, then we'll reload the data when we change a status.
+            // Otherwise the filter will look incorrect.
+            location.reload();
+        }
       }
 
       function updateStatusFilter() {
